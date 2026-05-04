@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -67,7 +68,7 @@ function NewJobForm() {
               {pets.length === 0 ? (
                 <p className="text-sm text-gray-500">
                   No pets yet.{' '}
-                  <a href="/pets/new" className="text-emerald-600 hover:underline">Add one first.</a>
+                  <Link href="/pets/new" className="text-emerald-600 hover:underline">Add one first.</Link>
                 </p>
               ) : (
                 <Select onValueChange={(v) => setValue('pet_id', v)}>
