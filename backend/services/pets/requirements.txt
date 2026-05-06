@@ -1,5 +1,7 @@
 Flask==2.3.3
 Flask-RESTful==0.3.10
 supabase==1.0.3
+gotrue==0.5.4
+pydantic>=1.10,<2.0
 PyJWT==2.8.0
 python-dotenv==1.0.0
