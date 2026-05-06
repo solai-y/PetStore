@@ -8,6 +8,8 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE profiles (
     id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
     role TEXT NOT NULL CHECK (role IN ('owner', 'caretaker')),
+    name TEXT,
+    email TEXT,
     bio TEXT,
     hourly_rate DECIMAL(10,2),
     accepted_pet_types TEXT[], -- e.g., ['dog', 'cat']

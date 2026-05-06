@@ -8,7 +8,7 @@ export default function CaretakerCard({ caretaker }) {
     <Card className="hover:shadow-md transition-shadow">
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between">
-          <CardTitle className="text-base">{caretaker.email || caretaker.id}</CardTitle>
+          <CardTitle className="text-base">{caretaker.name || caretaker.email || caretaker.id}</CardTitle>
           {caretaker.hourly_rate && (
             <span className="flex items-center gap-0.5 text-sm font-semibold text-emerald-600">
               <DollarSign className="w-3.5 h-3.5" />

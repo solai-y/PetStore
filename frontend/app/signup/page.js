@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 const PET_TYPES = ['dog', 'cat', 'bird', 'rabbit', 'fish', 'reptile'];
 
 const schema = z.object({
+  name: z.string().min(1, 'Name is required'),
   email: z.string().email('Invalid email'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   role: z.enum(['owner', 'caretaker']),
@@ -56,7 +57,7 @@ function SignupForm() {
   const onSubmit = async (data) => {
     setLoading(true);
     try {
-      const payload = { email: data.email, password: data.password, role: data.role };
+      const payload = { name: data.name, email: data.email, password: data.password, role: data.role };
       if (data.role === 'caretaker') {
         if (data.bio) payload.bio = data.bio;
         if (data.hourly_rate) payload.hourly_rate = data.hourly_rate;
@@ -80,6 +81,12 @@ function SignupForm() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="space-y-1">
+              <Label htmlFor="name">Full name</Label>
+              <Input id="name" type="text" placeholder="Jane Smith" {...register('name')} />
+              {errors.name && <p className="text-sm text-red-500">{errors.name.message}</p>}
+            </div>
+
             <div className="space-y-1">
               <Label htmlFor="email">Email</Label>
               <Input id="email" type="email" {...register('email')} />

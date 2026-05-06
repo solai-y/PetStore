@@ -1,4 +1,11 @@
 import os
+import httpx
+_orig_httpx_init = httpx.Client.__init__
+def _httpx_no_ssl(self, *args, **kwargs):
+    kwargs.setdefault('verify', False)
+    _orig_httpx_init(self, *args, **kwargs)
+httpx.Client.__init__ = _httpx_no_ssl
+
 from flask import Flask, request, jsonify, g
 from flask_restful import Api, Resource
 from supabase import create_client
@@ -13,9 +20,10 @@ from jwt_middleware import jwt_required
 load_dotenv()
 
 app = Flask(__name__)
+app.url_map.strict_slashes = False
 api = Api(app)
 
-supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
+supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
 
 class Signup(Resource):
     def post(self):
@@ -44,7 +52,9 @@ class Signup(Resource):
                 # Insert profile
                 profile_data = {
                     "id": user_id,
-                    "role": role
+                    "role": role,
+                    "name": data.get('name'),
+                    "email": email
                 }
                 if role == 'caretaker':
                     profile_data.update({

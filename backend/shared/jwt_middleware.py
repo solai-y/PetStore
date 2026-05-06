@@ -1,20 +1,22 @@
 import os
-import jwt
+import httpx
 from functools import wraps
-from flask import request, g, jsonify
+from flask import request, g
 
 
 def verify_jwt(token: str) -> dict:
-    secret = os.getenv("JWT_SECRET")
-    if not secret:
-        raise ValueError("JWT_SECRET not configured")
-    payload = jwt.decode(
-        token,
-        secret,
-        algorithms=["HS256"],
-        options={"verify_aud": False},
+    supabase_url = os.getenv("SUPABASE_URL")
+    anon_key = os.getenv("SUPABASE_ANON_KEY")
+    if not supabase_url or not anon_key:
+        raise ValueError("SUPABASE_URL or SUPABASE_ANON_KEY not configured")
+    response = httpx.get(
+        f"{supabase_url}/auth/v1/user",
+        headers={"Authorization": f"Bearer {token}", "apikey": anon_key},
+        verify=False,
     )
-    return payload
+    if response.status_code != 200:
+        raise ValueError(response.json().get("message", "Invalid token"))
+    return response.json()
 
 
 def jwt_required(f):
@@ -22,16 +24,14 @@ def jwt_required(f):
     def decorated(*args, **kwargs):
         header = request.headers.get("Authorization", "")
         if not header.startswith("Bearer "):
-            return jsonify({"error": "Missing or invalid Authorization header"}), 401
+            return {"error": "Missing or invalid Authorization header"}, 401
         token = header.split(" ", 1)[1]
         try:
-            payload = verify_jwt(token)
-            g.user_id = payload["sub"]
-            g.role = (payload.get("user_metadata") or {}).get("role")
-        except jwt.ExpiredSignatureError:
-            return jsonify({"error": "Token expired"}), 401
+            user_data = verify_jwt(token)
+            g.user_id = user_data["id"]
+            g.role = (user_data.get("user_metadata") or {}).get("role")
         except Exception as e:
-            return jsonify({"error": str(e)}), 401
+            return {"error": str(e)}, 401
         return f(*args, **kwargs)
     return decorated
 
@@ -41,7 +41,7 @@ def role_required(required_role: str):
         @wraps(f)
         def decorated(*args, **kwargs):
             if getattr(g, "role", None) != required_role:
-                return jsonify({"error": "Insufficient permissions"}), 403
+                return {"error": "Insufficient permissions"}, 403
             return f(*args, **kwargs)
         return decorated
     return decorator

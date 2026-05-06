@@ -34,14 +34,14 @@ INSERT INTO auth.users (
 ON CONFLICT (id) DO NOTHING;
 
 -- Sample user profiles
-INSERT INTO profiles (id, role, bio, hourly_rate, accepted_pet_types) VALUES
-    ('550e8400-e29b-41d4-a716-446655440000', 'owner', NULL, NULL, NULL),
-    ('550e8400-e29b-41d4-a716-446655440001', 'owner', NULL, NULL, NULL),
-    ('550e8400-e29b-41d4-a716-446655440002', 'owner', NULL, NULL, NULL),
-    ('550e8400-e29b-41d4-a716-446655440003', 'caretaker', 'Experienced dog walker with 5 years experience.', 25.00, ARRAY['dog']),
-    ('550e8400-e29b-41d4-a716-446655440004', 'caretaker', 'Cat lover, will pamper your feline friends.', 20.00, ARRAY['cat']),
-    ('550e8400-e29b-41d4-a716-446655440005', 'caretaker', 'All pets welcome! Specialize in small animals.', 30.00, ARRAY['dog', 'cat', 'bird', 'rabbit']),
-    ('550e8400-e29b-41d4-a716-446655440006', 'caretaker', 'Professional pet sitter for dogs and cats.', 28.00, ARRAY['dog', 'cat'])
+INSERT INTO profiles (id, role, name, bio, hourly_rate, accepted_pet_types) VALUES
+    ('550e8400-e29b-41d4-a716-446655440000', 'owner', 'Sarah Mitchell', NULL, NULL, NULL),
+    ('550e8400-e29b-41d4-a716-446655440001', 'owner', 'James Carter', NULL, NULL, NULL),
+    ('550e8400-e29b-41d4-a716-446655440002', 'owner', 'Emily Nguyen', NULL, NULL, NULL),
+    ('550e8400-e29b-41d4-a716-446655440003', 'caretaker', 'Alice Johnson', 'Experienced dog walker with 5 years experience.', 25.00, ARRAY['dog']),
+    ('550e8400-e29b-41d4-a716-446655440004', 'caretaker', 'Bob Smith', 'Cat lover, will pamper your feline friends.', 20.00, ARRAY['cat']),
+    ('550e8400-e29b-41d4-a716-446655440005', 'caretaker', 'Carol White', 'All pets welcome! Specialize in small animals.', 30.00, ARRAY['dog', 'cat', 'bird', 'rabbit']),
+    ('550e8400-e29b-41d4-a716-446655440006', 'caretaker', 'David Brown', 'Professional pet sitter for dogs and cats.', 28.00, ARRAY['dog', 'cat'])
 ON CONFLICT (id) DO NOTHING;
 
 -- Sample pets

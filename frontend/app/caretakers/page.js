@@ -28,8 +28,8 @@ export default function CaretakersPage() {
       filter === 'all' || c.accepted_pet_types?.includes(filter);
     const matchSearch =
       !search ||
-      c.bio?.toLowerCase().includes(search.toLowerCase()) ||
-      c.email?.toLowerCase().includes(search.toLowerCase());
+      c.name?.toLowerCase().includes(search.toLowerCase()) ||
+      c.bio?.toLowerCase().includes(search.toLowerCase());
     return matchType && matchSearch;
   });
 

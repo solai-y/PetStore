@@ -1,4 +1,11 @@
 import os
+import httpx
+_orig_httpx_init = httpx.Client.__init__
+def _httpx_no_ssl(self, *args, **kwargs):
+    kwargs.setdefault('verify', False)
+    _orig_httpx_init(self, *args, **kwargs)
+httpx.Client.__init__ = _httpx_no_ssl
+
 from flask import Flask, request, jsonify, g
 from flask_restful import Api, Resource
 from supabase import create_client
@@ -12,9 +19,10 @@ from email_service import send_applicant_confirmed_email, send_applicant_rejecte
 load_dotenv()
 
 app = Flask(__name__)
+app.url_map.strict_slashes = False
 api = Api(app)
 
-supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
+supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
 
 class Bookings(Resource):
     @jwt_required
@@ -55,7 +63,7 @@ class Bookings(Resource):
             if g.role == 'owner':
                 bookings = supabase.table('bookings').select('*, pets(name, species)').eq('owner_id', g.user_id).execute()
             else:  # caretaker
-                bookings = supabase.table('bookings').select('*, pets(name, species), profiles!owner_id(email)').eq('status', 'open').execute()
+                bookings = supabase.table('bookings').select('*, pets(name, species), profiles!owner_id(name)').eq('status', 'open').execute()
             return bookings.data, 200
         except Exception as e:
             return {"error": str(e)}, 400
@@ -64,7 +72,7 @@ class Booking(Resource):
     @jwt_required
     def get(self, booking_id):
         try:
-            booking = supabase.table('bookings').select('*, pets(*), applications(*, profiles!caretaker_id(email))').eq('id', booking_id).execute()
+            booking = supabase.table('bookings').select('*, pets(*), applications(*, profiles!caretaker_id(name))').eq('id', booking_id).execute()
             if not booking.data:
                 return {"error": "Booking not found"}, 404
 
@@ -142,21 +150,27 @@ class Confirm(Resource):
             supabase.table('applications').update({'status': 'rejected'}).eq('booking_id', booking_id).neq('id', application_id).execute()
 
             # Send emails
-            applications = supabase.table('applications').select('*, profiles!caretaker_id(email)').eq('booking_id', booking_id).execute()
+            applications = supabase.table('applications').select('*, profiles!caretaker_id(name, email)').eq('booking_id', booking_id).execute()
             for app in applications.data:
-                if app['id'] == application_id:
-                    send_applicant_confirmed_email(app['profiles']['email'], {
-                        'pet_name': booking_data['pets']['name'],
-                        'start_date': booking_data['start_date'],
-                        'end_date': booking_data['end_date'],
-                        'description': booking_data['description']
-                    })
-                else:
-                    send_applicant_rejected_email(app['profiles']['email'], {
-                        'pet_name': booking_data['pets']['name'],
-                        'start_date': booking_data['start_date'],
-                        'end_date': booking_data['end_date']
-                    })
+                caretaker_email = (app.get('profiles') or {}).get('email')
+                if not caretaker_email:
+                    continue
+                try:
+                    if app['id'] == application_id:
+                        send_applicant_confirmed_email(caretaker_email, {
+                            'pet_name': booking_data['pets']['name'],
+                            'start_date': booking_data['start_date'],
+                            'end_date': booking_data['end_date'],
+                            'description': booking_data['description']
+                        })
+                    else:
+                        send_applicant_rejected_email(caretaker_email, {
+                            'pet_name': booking_data['pets']['name'],
+                            'start_date': booking_data['start_date'],
+                            'end_date': booking_data['end_date']
+                        })
+                except Exception:
+                    pass
 
             return {"message": "Applicant confirmed successfully"}, 200
         except Exception as e:
