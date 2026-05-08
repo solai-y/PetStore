@@ -143,7 +143,7 @@ function JobDetailContent() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">
-                        {app.profiles?.email || app.caretaker_id}
+                        {app.profiles?.name || app.profiles?.email || app.caretaker_id}
                       </span>
                       <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[app.status]}`}>
                         {app.status}

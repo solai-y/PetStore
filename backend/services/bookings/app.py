@@ -149,28 +149,31 @@ class Confirm(Resource):
             supabase.table('applications').update({'status': 'accepted'}).eq('id', application_id).execute()
             supabase.table('applications').update({'status': 'rejected'}).eq('booking_id', booking_id).neq('id', application_id).execute()
 
-            # Send emails
-            applications = supabase.table('applications').select('*, profiles!caretaker_id(name, email)').eq('booking_id', booking_id).execute()
-            for app in applications.data:
-                caretaker_email = (app.get('profiles') or {}).get('email')
-                if not caretaker_email:
-                    continue
-                try:
-                    if app['id'] == application_id:
-                        send_applicant_confirmed_email(caretaker_email, {
-                            'pet_name': booking_data['pets']['name'],
-                            'start_date': booking_data['start_date'],
-                            'end_date': booking_data['end_date'],
-                            'description': booking_data['description']
-                        })
-                    else:
-                        send_applicant_rejected_email(caretaker_email, {
-                            'pet_name': booking_data['pets']['name'],
-                            'start_date': booking_data['start_date'],
-                            'end_date': booking_data['end_date']
-                        })
-                except Exception:
-                    pass
+            # Send emails (best-effort — skipped if email column missing or Mailgun unconfigured)
+            try:
+                applications = supabase.table('applications').select('*, profiles!caretaker_id(name, email)').eq('booking_id', booking_id).execute()
+                for app in applications.data:
+                    caretaker_email = (app.get('profiles') or {}).get('email')
+                    if not caretaker_email:
+                        continue
+                    try:
+                        if app['id'] == application_id:
+                            send_applicant_confirmed_email(caretaker_email, {
+                                'pet_name': booking_data['pets']['name'],
+                                'start_date': booking_data['start_date'],
+                                'end_date': booking_data['end_date'],
+                                'description': booking_data['description']
+                            })
+                        else:
+                            send_applicant_rejected_email(caretaker_email, {
+                                'pet_name': booking_data['pets']['name'],
+                                'start_date': booking_data['start_date'],
+                                'end_date': booking_data['end_date']
+                            })
+                    except Exception:
+                        pass
+            except Exception:
+                pass
 
             return {"message": "Applicant confirmed successfully"}, 200
         except Exception as e:
