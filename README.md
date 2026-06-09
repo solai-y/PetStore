@@ -148,6 +148,150 @@ PetStore/
 
 ---
 
+## CI Pipeline
+
+The pipeline is defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) and runs on every push and pull request to `main`. It consists of three parallel jobs.
+
+### Jobs
+
+#### `backend` (matrix: auth · users · pets · bookings)
+
+Runs once per service using a 4-way matrix strategy so all services are tested in parallel.
+
+| Step | What it does |
+|---|---|
+| `actions/setup-python@v5` | Provisions Python 3.11 |
+| Install dependencies | `pip install -r backend/services/<service>/requirements.txt pytest` |
+| Run tests | `pytest tests/ -v` from within the service directory |
+
+Each service is tested in isolation using mocked Supabase clients (via `unittest.mock`) so no real database or network calls are made. Mock environment variables (`SUPABASE_URL`, `JWT_SECRET`, etc.) are injected at the job level.
+
+**Test coverage per service:**
+
+| Service | Tests |
+|---|---|
+| `auth` | Signup (success, missing fields, invalid role), login (success, invalid credentials), `/me`, logout |
+| `users` | Get profile (success, unauthorized), update profile, list caretakers |
+| `pets` | List pets, create pet (success, missing fields), update pet, delete pet |
+| `bookings` | Create/list/cancel booking, apply to booking (success, closed), confirm applicant, withdraw application, reject application, role enforcement |
+
+#### `frontend`
+
+Runs against the `frontend/` directory using Node.js 20.
+
+| Step | What it does |
+|---|---|
+| `npm ci` | Installs exact dependencies from `package-lock.json` |
+| `npm run lint` | ESLint check across all source files |
+| `npm test` | Jest + Testing Library suite (`--watchAll=false --passWithNoTests`) |
+| `npm run build` | Next.js production build with `NEXT_PUBLIC_API_URL` set |
+
+**Frontend test coverage:**
+
+| Suite | Tests |
+|---|---|
+| `auth.test.js` | Login page renders, empty-form validation errors, successful login + redirect, failed login error toast |
+| `job-form.test.js` | Form renders after pet load, validation on empty submit, booking creation on valid submit |
+| `application-confirm.test.js` | Owner sees applicant list with Confirm button, owner confirm flow, caretaker sees apply form, caretaker apply flow |
+
+#### `docker-build`
+
+Validates that all four service images and the nginx gateway can be built from scratch.
+
+| Step | What it does |
+|---|---|
+| Create `.env` | Copies `.env.example` to `.env` so `docker compose build` has required variables |
+| Build images | `docker compose -f backend/docker-compose.yaml build` across all five services |
+
+This catches Dockerfile errors, missing base images, and broken `COPY` paths before they reach a deployment.
+
+---
+
+## Security Testing
+
+### SAST — Static Application Security Testing
+
+**Tool:** [Bandit](https://bandit.readthedocs.io) v1.9.4  
+**Scope:** All backend Python source files (`backend/shared/`, `backend/services/*/app.py`), excluding test directories  
+**Run date:** 2026-06-09
+
+**Results summary:**
+
+| Severity | Count |
+|---|---|
+| High | 5 |
+| Medium | 4 |
+| Low | 0 |
+
+**Findings:**
+
+| ID | Severity | File | Line | Description |
+|---|---|---|---|---|
+| B201 | High | `services/auth/app.py` | 138 | `debug=True` on Flask — exposes Werkzeug interactive debugger, allows arbitrary code execution (CWE-94) |
+| B201 | High | `services/bookings/app.py` | 253 | Same as above |
+| B201 | High | `services/pets/app.py` | 97 | Same as above |
+| B201 | High | `services/users/app.py` | 73 | Same as above |
+| B501 | High | `shared/jwt_middleware.py` | 15 | `verify=False` on `httpx.get` — disables TLS certificate validation when calling Supabase `/auth/v1/user` (CWE-295) |
+| B104 | Medium | `services/auth/app.py` | 138 | Binding to `0.0.0.0` exposes Flask on all network interfaces (CWE-605) |
+| B104 | Medium | `services/bookings/app.py` | 253 | Same as above |
+| B104 | Medium | `services/pets/app.py` | 97 | Same as above |
+| B104 | Medium | `services/users/app.py` | 73 | Same as above |
+
+**Remediation notes:**
+
+- **B201 (`debug=True`):** The `if __name__ == '__main__': app.run(debug=True)` block is only reached when running Flask directly — in production these services run under `gunicorn` inside Docker, so the debugger is never actually activated. For production hardening, change to `debug=False` or read from an environment variable (`debug=os.getenv("FLASK_DEBUG","false").lower()=="true"`).
+- **B501 (`verify=False`):** Added as a workaround for local development where Supabase uses a self-signed certificate. For production, remove `verify=False` and ensure the host trusts the Supabase CA. Also note the top-of-file monkey-patch (`_httpx_no_ssl`) that globally disables TLS verification for all `httpx.Client` instances in each service — this should also be removed in production.
+- **B104 (bind `0.0.0.0`):** Acceptable inside Docker Compose where the services are on a private bridge network (`carepets`) and only the nginx gateway is externally exposed. No action needed unless services are ever run outside Docker.
+
+---
+
+### DAST — Dynamic Application Security Testing
+
+**Method:** Code-assisted runtime analysis — each endpoint's authentication, authorisation, and input-handling logic was traced against OWASP Top 10 categories. The backend was not reachable during automated scanning; findings are derived from source code review of runtime behaviour.  
+**Scope:** All four Flask services + nginx gateway  
+**Date:** 2026-06-09
+
+#### Passed checks
+
+| Check | Result | Evidence |
+|---|---|---|
+| Authentication enforcement | PASS | All mutating endpoints decorated with `@jwt_required`; missing/invalid `Authorization` header returns 401 |
+| Role-based access control | PASS | `@role_required('owner')` / `@role_required('caretaker')` enforced on all role-sensitive endpoints; wrong role returns 403 |
+| IDOR — profile read/update | PASS | `GET /users/:id` and `PUT /users/:id` compare `g.user_id != user_id` before proceeding |
+| IDOR — pet CRUD | PASS | All pet queries filter by `.eq('owner_id', g.user_id)`, preventing cross-user access |
+| IDOR — booking confirm/cancel | PASS | `DELETE /bookings/:id` and `POST /bookings/:id/confirm` verify `owner_id = g.user_id` via Supabase query |
+| SQL injection | PASS | All DB access uses the Supabase Python client with parameterised queries; no raw SQL string construction found |
+| CORS origin restriction | PASS | nginx restricts `Access-Control-Allow-Origin` to `http://localhost:3000` only |
+| Ownership on pet-to-booking | PASS | `POST /bookings` verifies the referenced `pet_id` belongs to `g.user_id` before insert |
+| Double-booking prevention | PASS | DB `UNIQUE(booking_id, caretaker_id)` constraint prevents duplicate applications |
+
+#### Findings
+
+| # | Severity | Category | Description |
+|---|---|---|---|
+| D-01 | Medium | Information Disclosure | All services return raw Python exception strings (`return {"error": str(e)}, 400`) in catch blocks. Internal Supabase error messages, table names, and constraint names can be leaked to the client. |
+| D-02 | Medium | Missing Security Headers | nginx does not set `X-Content-Type-Options`, `X-Frame-Options`, `Content-Security-Policy`, or `Strict-Transport-Security`. These are required for production hardening. |
+| D-03 | Medium | Unauthenticated Data Exposure | `GET /api/users/caretakers` requires no authentication and returns all caretaker profiles including name, bio, and hourly rate. Acceptable if caretaker browsing is intentionally public; should be a documented design decision. |
+| D-04 | Low | No Rate Limiting | The login endpoint (`POST /api/auth/login`) has no rate limiting at the nginx or application layer, making it susceptible to credential brute-force. |
+| D-05 | Low | JWT Stored in localStorage | The frontend stores JWTs in `localStorage`, which is accessible to JavaScript and vulnerable to XSS-based theft. `httpOnly` cookies are the recommended alternative. |
+| D-06 | Low | Verbose Error on Confirm | `POST /bookings/:id/confirm` prints `[email] failed to send to <email>: <error>` to stdout, potentially logging caretaker email addresses in plaintext in container logs. |
+| D-07 | Informational | TLS Disabled Globally | The `_httpx_no_ssl` monkey-patch at the top of each service file disables TLS verification for every `httpx.Client` instance in that process — not just the Supabase call. If any third-party HTTP call is ever added to a service, it will also skip certificate validation silently. |
+
+**Remediation notes:**
+
+- **D-01:** Replace `str(e)` with a generic message for unexpected errors. Reserve the raw error only for known validation failures (e.g. missing fields). Example: `return {"error": "An unexpected error occurred"}, 500` in the outer except block.
+- **D-02:** Add to `nginx.conf` server block:
+  ```nginx
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header X-Frame-Options "DENY" always;
+  add_header Content-Security-Policy "default-src 'self'" always;
+  ```
+- **D-04:** Add `limit_req_zone` / `limit_req` to nginx for the `/api/auth/login` location, or use Supabase's built-in brute-force protection (enabled by default in the Auth settings).
+- **D-05:** Migrate JWT storage from `localStorage` to `httpOnly` `SameSite=Strict` cookies; update the fetch wrapper in `lib/api.js` to send credentials rather than reading from storage.
+- **D-07:** Scope the `verify=False` workaround to only the specific `httpx.get` call in `jwt_middleware.py` and remove the global monkey-patch.
+
+---
+
 ## Security Considerations
 
 ### Password Hashing
