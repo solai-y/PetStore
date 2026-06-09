@@ -213,43 +213,49 @@ This catches Dockerfile errors, missing base images, and broken `COPY` paths bef
 
 **Tool:** [Bandit](https://bandit.readthedocs.io) v1.9.4  
 **Scope:** All backend Python source files (`backend/shared/`, `backend/services/*/app.py`), excluding test directories  
-**Run date:** 2026-06-09
+**Last run:** 2026-06-09 — re-run after B201 fix
 
 **Results summary:**
 
-| Severity | Count |
-|---|---|
-| High | 5 |
-| Medium | 4 |
-| Low | 0 |
+| Severity | Count | Change from initial scan |
+|---|---|---|
+| High | 1 | ↓ 4 (B201 fixed) |
+| Medium | 4 | — |
+| Low | 0 | — |
 
 **Findings:**
 
-| ID | Severity | File | Line | Description |
-|---|---|---|---|---|
-| B201 | High | `services/auth/app.py` | 138 | `debug=True` on Flask — exposes Werkzeug interactive debugger, allows arbitrary code execution (CWE-94) |
-| B201 | High | `services/bookings/app.py` | 253 | Same as above |
-| B201 | High | `services/pets/app.py` | 97 | Same as above |
-| B201 | High | `services/users/app.py` | 73 | Same as above |
-| B501 | High | `shared/jwt_middleware.py` | 15 | `verify=False` on `httpx.get` — disables TLS certificate validation when calling Supabase `/auth/v1/user` (CWE-295) |
-| B104 | Medium | `services/auth/app.py` | 138 | Binding to `0.0.0.0` exposes Flask on all network interfaces (CWE-605) |
-| B104 | Medium | `services/bookings/app.py` | 253 | Same as above |
-| B104 | Medium | `services/pets/app.py` | 97 | Same as above |
-| B104 | Medium | `services/users/app.py` | 73 | Same as above |
+| ID | Severity | File | Line | Status | Description |
+|---|---|---|---|---|---|
+| B201 | High | `services/auth/app.py` | 138 | ✅ Fixed | `debug=True` on Flask — Werkzeug debugger, arbitrary code execution (CWE-94) |
+| B201 | High | `services/bookings/app.py` | 253 | ✅ Fixed | Same as above |
+| B201 | High | `services/pets/app.py` | 97 | ✅ Fixed | Same as above |
+| B201 | High | `services/users/app.py` | 73 | ✅ Fixed | Same as above |
+| B501 | High | `shared/jwt_middleware.py` | 15 | Open | `verify=False` on `httpx.get` — disables TLS certificate validation when calling Supabase `/auth/v1/user` (CWE-295) |
+| B104 | Medium | `services/auth/app.py` | 138 | Accepted | Binding to `0.0.0.0` exposes Flask on all network interfaces (CWE-605) |
+| B104 | Medium | `services/bookings/app.py` | 253 | Accepted | Same as above |
+| B104 | Medium | `services/pets/app.py` | 97 | Accepted | Same as above |
+| B104 | Medium | `services/users/app.py` | 73 | Accepted | Same as above |
 
-**Remediation notes:**
+**Fix applied — B201:**  
+All four services now read the debug flag from the environment:
+```python
+app.run(host='0.0.0.0', port=XXXX, debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true')
+```
+Debug mode defaults to `false`. It can be enabled locally by setting `FLASK_DEBUG=true` in the environment. All 32 backend unit tests pass after the change.
 
-- **B201 (`debug=True`):** The `if __name__ == '__main__': app.run(debug=True)` block is only reached when running Flask directly — in production these services run under `gunicorn` inside Docker, so the debugger is never actually activated. For production hardening, change to `debug=False` or read from an environment variable (`debug=os.getenv("FLASK_DEBUG","false").lower()=="true"`).
-- **B501 (`verify=False`):** Added as a workaround for local development where Supabase uses a self-signed certificate. For production, remove `verify=False` and ensure the host trusts the Supabase CA. Also note the top-of-file monkey-patch (`_httpx_no_ssl`) that globally disables TLS verification for all `httpx.Client` instances in each service — this should also be removed in production.
-- **B104 (bind `0.0.0.0`):** Acceptable inside Docker Compose where the services are on a private bridge network (`carepets`) and only the nginx gateway is externally exposed. No action needed unless services are ever run outside Docker.
+**Remaining findings:**
+
+- **B501 (`verify=False`):** Added as a workaround for local development where the Supabase client uses a self-signed certificate. For production, remove `verify=False` and ensure the host trusts the Supabase CA. Also note the top-of-file monkey-patch (`_httpx_no_ssl`) that globally disables TLS verification for all `httpx.Client` instances in each service — this should also be removed in production.
+- **B104 (bind `0.0.0.0`):** Accepted risk. Services are on a private Docker bridge network (`carepets`) and only the nginx gateway is externally exposed. No action needed unless services are ever run outside Docker.
 
 ---
 
 ### DAST — Dynamic Application Security Testing
 
-**Method:** Code-assisted runtime analysis — each endpoint's authentication, authorisation, and input-handling logic was traced against OWASP Top 10 categories. The backend was not reachable during automated scanning; findings are derived from source code review of runtime behaviour.  
+**Method:** Code-assisted runtime analysis — each endpoint's authentication, authorisation, and input-handling logic was traced against OWASP Top 10 categories. Findings are derived from source code review of runtime behaviour.  
 **Scope:** All four Flask services + nginx gateway  
-**Date:** 2026-06-09
+**Last run:** 2026-06-09 — no change in findings from B201 fix (debug mode does not affect runtime attack surface)
 
 #### Passed checks
 

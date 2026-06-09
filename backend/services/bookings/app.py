@@ -250,4 +250,4 @@ api.add_resource(WithdrawApplication, '/bookings/<string:booking_id>/application
 api.add_resource(RejectApplication, '/bookings/<string:booking_id>/applications/<string:application_id>/reject')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5004, debug=True)
+    app.run(host='0.0.0.0', port=5004, debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true')

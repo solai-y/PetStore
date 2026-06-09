@@ -94,4 +94,4 @@ api.add_resource(Pets, '/pets')
 api.add_resource(Pet, '/pets/<string:pet_id>')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5003, debug=True)
+    app.run(host='0.0.0.0', port=5003, debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true')

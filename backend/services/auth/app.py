@@ -135,4 +135,4 @@ api.add_resource(Logout, '/auth/logout')
 api.add_resource(Me, '/auth/me')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    app.run(host='0.0.0.0', port=5001, debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true')
