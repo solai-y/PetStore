@@ -12,7 +12,7 @@ def send_email(to_email: str, subject: str, body: str):
     sender = os.getenv("EMAIL_FROM", username)
 
     if not all([host, username, password]):
-        raise ValueError("SMTP configuration missing")
+        raise ValueError("SMTP configurations missing")
 
     msg = MIMEMultipart()
     msg["From"] = sender
