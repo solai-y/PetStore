@@ -10,6 +10,7 @@ from flask import Flask, request, jsonify, g
 from flask_restful import Api, Resource
 from supabase import create_client
 from dotenv import load_dotenv
+from datetime import date as _date
 import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../shared'))
@@ -37,6 +38,14 @@ class Bookings(Resource):
 
         if not all([pet_id, start_date, end_date, description]):
             return {"error": "pet_id, start_date, end_date, description required"}, 400
+
+        try:
+            parsed_start = _date.fromisoformat(start_date)
+        except ValueError:
+            return {"error": "start_date must be a valid date (YYYY-MM-DD)"}, 400
+
+        if parsed_start < _date.today():
+            return {"error": "start_date cannot be in the past"}, 400
 
         # Verify pet belongs to owner
         pet = supabase.table('pets').select('id').eq('id', pet_id).eq('owner_id', g.user_id).execute()

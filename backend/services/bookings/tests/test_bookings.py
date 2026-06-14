@@ -1,5 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
+from datetime import date, timedelta
 from app import app
 
 
@@ -23,12 +24,14 @@ def test_create_booking(mock_supabase, client):
     mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = pet_result
     mock_supabase.table.return_value.insert.return_value.execute.return_value = booking_result
 
+    future_start = (date.today() + timedelta(days=7)).isoformat()
+    future_end = (date.today() + timedelta(days=9)).isoformat()
     response = client.post(
         "/bookings",
         json={
             "pet_id": "pet-id",
-            "start_date": "2024-06-01",
-            "end_date": "2024-06-03",
+            "start_date": future_start,
+            "end_date": future_end,
             "description": "Walk my dog",
             "budget": 150,
         },
@@ -36,6 +39,65 @@ def test_create_booking(mock_supabase, client):
     )
 
     assert response.status_code == 201
+
+
+@patch("app.supabase")
+def test_create_booking_past_start_date(mock_supabase, client):
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    response = client.post(
+        "/bookings",
+        json={
+            "pet_id": "pet-id",
+            "start_date": yesterday,
+            "end_date": (date.today() + timedelta(days=1)).isoformat(),
+            "description": "Walk my dog",
+        },
+        headers=auth_header("owner-id", "owner"),
+    )
+
+    assert response.status_code == 400
+    assert "past" in response.get_json()["error"]
+
+
+@patch("app.supabase")
+def test_create_booking_today_start_date(mock_supabase, client):
+    pet_result = MagicMock()
+    pet_result.data = [{"id": "pet-id"}]
+    booking_result = MagicMock()
+    booking_result.data = [{"id": "booking-id", "status": "open"}]
+    mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = pet_result
+    mock_supabase.table.return_value.insert.return_value.execute.return_value = booking_result
+
+    today = date.today().isoformat()
+    response = client.post(
+        "/bookings",
+        json={
+            "pet_id": "pet-id",
+            "start_date": today,
+            "end_date": (date.today() + timedelta(days=2)).isoformat(),
+            "description": "Walk my dog",
+        },
+        headers=auth_header("owner-id", "owner"),
+    )
+
+    assert response.status_code == 201
+
+
+@patch("app.supabase")
+def test_create_booking_invalid_date_format(mock_supabase, client):
+    response = client.post(
+        "/bookings",
+        json={
+            "pet_id": "pet-id",
+            "start_date": "not-a-date",
+            "end_date": "2099-01-10",
+            "description": "Walk my dog",
+        },
+        headers=auth_header("owner-id", "owner"),
+    )
+
+    assert response.status_code == 400
+    assert "YYYY-MM-DD" in response.get_json()["error"]
 
 
 @patch("app.supabase")
