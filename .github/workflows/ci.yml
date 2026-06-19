@@ -84,22 +84,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create .env from example
-        run: cp backend/.env.example backend/.env
+      - name: Create mock .env for smoke test
+        run: |
+          cat > backend/.env << 'EOF'
+          SUPABASE_URL=http://mock.supabase.co
+          SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7W9oLGAkPOqNvv_G3f6O4gTcATpKLnOY1I4
+          SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hj04zWl196z2-SBc0
+          JWT_SECRET=mock-jwt-secret
+          SMTP_HOST=smtp.example.com
+          SMTP_PORT=587
+          SMTP_USER=noreply@example.com
+          SMTP_PASS=mock-smtp-password
+          EMAIL_FROM=CarePets <noreply@example.com>
+          EOF
 
       - name: Start stack
         run: docker compose -f backend/docker-compose.yaml up -d
 
       - name: Wait for all services to be ready
         run: |
-          timeout 90 bash -c '
-            until [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/auth/me)" = "401" ] &&
-                  [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/users/smoke-test)" = "401" ] &&
-                  [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/pets)" = "401" ] &&
-                  [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/bookings)" = "401" ]; do
-              sleep 2
-            done
-          '
+          for i in $(seq 1 45); do
+            auth=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/auth/me)
+            users=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/users/smoke-test)
+            pets=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/pets)
+            bookings=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/bookings)
+            echo "Attempt $i: auth=$auth users=$users pets=$pets bookings=$bookings"
+            if [ "$auth" = "401" ] && [ "$users" = "401" ] && [ "$pets" = "401" ] && [ "$bookings" = "401" ]; then
+              echo "All services ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Services did not become ready – dumping logs"
+          docker compose -f backend/docker-compose.yaml logs
+          exit 1
 
       - name: Smoke test – auth service
         run: |
