@@ -104,10 +104,10 @@ jobs:
       - name: Wait for all services to be ready
         run: |
           for i in $(seq 1 45); do
-            auth=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/auth/me)
-            users=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/users/smoke-test)
-            pets=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/pets)
-            bookings=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/bookings)
+            auth=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/auth/me || echo "000")
+            users=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/users/smoke-test || echo "000")
+            pets=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/pets || echo "000")
+            bookings=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/bookings || echo "000")
             echo "Attempt $i: auth=$auth users=$users pets=$pets bookings=$bookings"
             if [ "$auth" = "401" ] && [ "$users" = "401" ] && [ "$pets" = "401" ] && [ "$bookings" = "401" ]; then
               echo "All services ready"
@@ -121,22 +121,22 @@ jobs:
 
       - name: Smoke test – auth service
         run: |
-          status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/auth/me)
+          status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/auth/me || echo "000")
           [ "$status" = "401" ] || (echo "Auth: expected 401, got $status" && exit 1)
 
       - name: Smoke test – users service
         run: |
-          status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/users/smoke-test)
+          status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/users/smoke-test || echo "000")
           [ "$status" = "401" ] || (echo "Users: expected 401, got $status" && exit 1)
 
       - name: Smoke test – pets service
         run: |
-          status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/pets)
+          status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/pets || echo "000")
           [ "$status" = "401" ] || (echo "Pets: expected 401, got $status" && exit 1)
 
       - name: Smoke test – bookings service
         run: |
-          status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/bookings)
+          status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/bookings || echo "000")
           [ "$status" = "401" ] || (echo "Bookings: expected 401, got $status" && exit 1)
 
       - name: Tear down
