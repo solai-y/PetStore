@@ -50,7 +50,7 @@ def test_create_booking_past_start_date(mock_supabase, client):
             "pet_id": "pet-id",
             "start_date": yesterday,
             "end_date": (date.today() + timedelta(days=1)).isoformat(),
-            "description": "Walk my dog",
+            "description": "Walk my dog!",
         },
         headers=auth_header("owner-id", "owner"),
     )
